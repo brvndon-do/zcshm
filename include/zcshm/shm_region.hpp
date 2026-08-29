@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <sys/mman.h>
 
 namespace zcshm {
     class ShmRegion {
@@ -13,6 +14,18 @@ namespace zcshm {
 
         ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned);
 
+        void reset() {
+            if (data_)
+                munmap(data_, size_);
+
+            if (owned_)
+                shm_unlink(name_.c_str());
+
+            data_ = nullptr;
+            size_ = 0;
+            owned_ = false;
+        }
+
     public:
         static ShmRegion create(const std::string& name, std::size_t size);
         static ShmRegion attach(const std::string& name);
@@ -20,8 +33,8 @@ namespace zcshm {
         ~ShmRegion();
 
         // move
-        ShmRegion(ShmRegion&&) noexcept;
-        ShmRegion& operator=(ShmRegion&&) noexcept;
+        ShmRegion(ShmRegion&& other) noexcept;
+        ShmRegion& operator=(ShmRegion&& other) noexcept;
 
         // copy (do not generate)
         ShmRegion(const ShmRegion&)=delete;
