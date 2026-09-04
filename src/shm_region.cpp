@@ -2,6 +2,8 @@
 #include <chrono>
 #include <cstddef>
 #include <fcntl.h>
+#include <format>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <system_error>
 #include <thread>
@@ -13,7 +15,7 @@
 namespace zcshm {
 
 namespace {
-    void throwIfFailed(int rc, int* fd, const std::string* name, const std::string& msg) {
+    void failWith(int rc, int* fd, const std::string* name, const std::string& msg) {
         if (rc == -1) {
             int err = errno;
             if (fd)
@@ -26,24 +28,36 @@ namespace {
         }
     }
 
-    void throwIfFailed(int* fd, const std::string* name, const std::string& msg) {
-        throwIfFailed(-1, fd, name, msg);
+    void failWith(int* fd, const std::string* name, const std::string& msg) {
+        failWith(-1, fd, name, msg);
     }
 }
+
+    void ShmRegion::reset() noexcept {
+        if (data_)
+            munmap(data_, size_);
+
+        if (owned_)
+            shm_unlink(name_.c_str());
+
+        data_ = nullptr;
+        size_ = 0;
+        owned_ = false;
+    }
 
     ShmRegion::ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned)
         : data_(data), name_(std::move(name)), size_(size), owned_(owned) {}
 
     ShmRegion ShmRegion::create(const std::string& name, std::size_t size) {
         int fd = shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
-        throwIfFailed(fd, nullptr, nullptr, "shmopen");
+        failWith(fd, nullptr, nullptr, "shmopen");
 
         int rc = ftruncate(fd, size);
-        throwIfFailed(rc, &fd, &name, "ftruncate");
+        failWith(rc, &fd, &name, "ftruncate");
 
         auto* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (ptr == MAP_FAILED)
-            throwIfFailed(&fd, &name, "mmap");
+            failWith(&fd, &name, "mmap");
 
         close(fd);
 
@@ -52,11 +66,11 @@ namespace {
 
     ShmRegion ShmRegion::attach(const std::string& name) {
         int fd = shm_open(name.c_str(), O_RDWR, 0); // mode is ignored entirely unless O_CREAT is in the flags; 0 is ok here
-        throwIfFailed(fd, nullptr, nullptr, "shmopen");
+        failWith(fd, nullptr, nullptr, "shmopen");
 
         struct stat out;
         int rc = fstat(fd, &out);
-        throwIfFailed(rc, &fd, nullptr, "fstat");
+        failWith(rc, &fd, nullptr, "fstat");
 
         std::size_t size = out.st_size;
         int retryCount = 0;
@@ -64,19 +78,25 @@ namespace {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             rc = fstat(fd, &out);
-            throwIfFailed(rc, &fd, nullptr, "fstat");
+            failWith(rc, &fd, nullptr, "fstat");
             size = out.st_size;
 
             ++retryCount;
         }
-        // TODO: gracefully error out once retry is done.
+
         if (size == 0) {
-            // cleanup and throw?
+            close(fd);
+
+            throw std::system_error(
+                ETIMEDOUT,
+                std::system_category(),
+                std::format("timed out waiting for {0} to be sized", name)
+            );
         }
 
         auto* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (ptr == MAP_FAILED)
-            throwIfFailed(&fd, &name, "mmap");
+            failWith(&fd, nullptr, "mmap");
 
         close(fd);
 
