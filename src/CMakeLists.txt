@@ -1,4 +1,4 @@
-add_library(zcshm STATIC shm_region.cpp)
+add_library(zcshm STATIC shm_region.cpp mailbox.cpp)
 
 target_compile_features(zcshm PUBLIC cxx_std_20)
 target_include_directories (zcshm PUBLIC ${PROJECT_SOURCE_DIR}/include)

@@ -1,18 +1,17 @@
-#include <chrono>
-#include <cstring>
 #include <iostream>
-#include <thread>
+#include <string>
 
-#include "zcshm/shm_region.hpp"
+#include "zcshm/mailbox.hpp"
 
 int main() {
-    zcshm::ShmRegion shm = zcshm::ShmRegion::create("/zcshm", 4096);
-    std::string msg = "Hello, from producer!";
-    std::memcpy(shm.data(), msg.c_str(), msg.length() + 1);
+    zcshm::Mailbox mailbox = zcshm::Mailbox::create("/zcshm");
 
-    for (;;) {
-        std::cout << "awaiting...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+    while (true) {
+        std::string msg;
+        std::cout << "message: ";
+        std::getline(std::cin, msg);
+
+        mailbox.publish(msg);
     }
 
     return 0;

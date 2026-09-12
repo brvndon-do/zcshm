@@ -1,13 +1,14 @@
 #include <iostream>
 #include <string>
 
-#include "zcshm/shm_region.hpp"
+#include "zcshm/mailbox.hpp"
 
 int main() {
-    zcshm::ShmRegion shm = zcshm::ShmRegion::attach("/zcshm");
-    std::string s = reinterpret_cast<char *>(shm.data());
-
-    std::cout << "[output]:" << s << '\n';
+    zcshm::Mailbox mailbox = zcshm::Mailbox::attach("/zcshm");
+    std::string out;
+    while (mailbox.tryReceive(out)) {
+        std::cout << "from producer: " << out << '\n';
+    }
 
     return 0;
 }
