@@ -15,7 +15,7 @@ namespace zcshm {
         std::byte payload[kCapacity];
     };
 
-    struct MessageHeader {
+    struct ControlBlock {
         static constexpr std::size_t kSlots = 16; // power of 2 so that % becomes bitmask instead of division
 
         // special value (signature) to prove that the bytes at that address is ours
@@ -30,9 +30,9 @@ namespace zcshm {
     static_assert(
         std::atomic<std::uint64_t>::is_always_lock_free,
         "seq must be lock-free");
-    static_assert(std::is_standard_layout_v<MessageHeader>);
-    static_assert(sizeof(MessageHeader) == 65792);
+    static_assert(std::is_standard_layout_v<ControlBlock>);
+    static_assert(sizeof(ControlBlock) == 65792);
     static_assert(sizeof(Slot) == 4100);
-    static_assert(offsetof(MessageHeader, slots) == 192);
+    static_assert(offsetof(ControlBlock, slots) == 192);
     static_assert(offsetof(Slot, payload) == 4);
 }

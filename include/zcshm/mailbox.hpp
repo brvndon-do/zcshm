@@ -3,14 +3,14 @@
 #include <string>
 #include <string_view>
 
-#include "message_header.hpp"
+#include "layout.hpp"
 #include "shm_region.hpp"
 
 namespace zcshm {
     class Mailbox {
     private:
         ShmRegion region_;
-        MessageHeader* header_;
+        ControlBlock* block_;
 
         Mailbox(ShmRegion region);
     public:
