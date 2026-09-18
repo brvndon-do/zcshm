@@ -14,24 +14,24 @@
 
 namespace zcshm {
 
-namespace {
-    void failWith(int rc, int* fd, const std::string* name, const std::string& msg) {
-        if (rc == -1) {
-            int err = errno;
-            if (fd)
-                close(*fd);
+    namespace {
+        void failWith(int rc, int* fd, const std::string* name, const std::string& msg) {
+            if (rc == -1) {
+                int err = errno;
+                if (fd)
+                    close(*fd);
 
-            if (name)
-                shm_unlink(name->c_str());
+                if (name)
+                    shm_unlink(name->c_str());
 
-            throw std::system_error(err, std::system_category(), msg);
+                throw std::system_error(err, std::system_category(), msg);
+            }
+        }
+
+        void failWith(int* fd, const std::string* name, const std::string& msg) {
+            failWith(-1, fd, name, msg);
         }
     }
-
-    void failWith(int* fd, const std::string* name, const std::string& msg) {
-        failWith(-1, fd, name, msg);
-    }
-}
 
     void ShmRegion::reset() noexcept {
         if (data_)
@@ -103,10 +103,6 @@ namespace {
         return ShmRegion{static_cast<std::byte*>(ptr), name, size, false};
     }
 
-    ShmRegion::~ShmRegion() {
-        reset();
-    }
-
     ShmRegion::ShmRegion(ShmRegion&& other) noexcept
         : data_(other.data_), name_(std::move(other.name_)), size_(other.size_), owned_(other.owned_) {
             other.data_ = nullptr;
@@ -127,6 +123,10 @@ namespace {
         }
 
         return *this;
+    }
+
+    ShmRegion::~ShmRegion() {
+        reset();
     }
 
     std::byte* ShmRegion::data() noexcept {

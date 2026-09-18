@@ -19,8 +19,6 @@ namespace zcshm {
         static ShmRegion create(const std::string& name, std::size_t size);
         static ShmRegion attach(const std::string& name);
 
-        ~ShmRegion();
-
         // move
         ShmRegion(ShmRegion&& other) noexcept;
         ShmRegion& operator=(ShmRegion&& other) noexcept;
@@ -28,6 +26,8 @@ namespace zcshm {
         // copy (do not generate)
         ShmRegion(const ShmRegion&)=delete;
         ShmRegion& operator=(const ShmRegion&)=delete;
+
+        ~ShmRegion();
 
         std::byte* data() noexcept;
         const std::byte* data() const noexcept;

@@ -24,10 +24,10 @@ int main() {
 
     // TODO: safe for now since spsc?
     while (running.load()) {
-        std::string msg;
         std::cout << "message: " << std::flush;
+        std::span<std::byte> span = mailbox.reserve();
 
-        if (!std::getline(std::cin, msg)) {
+        if (!std::cin.getline(reinterpret_cast<char*>(span.data()), span.size())) {
             if (!running.load())
                 break;
 
@@ -36,7 +36,7 @@ int main() {
             break;
         }
 
-        mailbox.publish(msg);
+        mailbox.commit(std::cin.gcount() - 1);
     }
 
     return 0;

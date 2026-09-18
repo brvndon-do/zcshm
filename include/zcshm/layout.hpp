@@ -31,6 +31,7 @@ namespace zcshm {
         std::atomic<std::uint64_t>::is_always_lock_free,
         "seq must be lock-free");
     static_assert(std::is_standard_layout_v<ControlBlock>);
+    static_assert(std::is_trivially_destructible_v<ControlBlock>);
     static_assert(sizeof(ControlBlock) == 65792);
     static_assert(sizeof(Slot) == 4100);
     static_assert(offsetof(ControlBlock, slots) == 192);
