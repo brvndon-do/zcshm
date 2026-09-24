@@ -9,10 +9,11 @@ namespace zcshm {
     static constexpr std::size_t kCacheLine = 64;
 
     struct Slot {
-        static constexpr std::size_t kCapacity = 4096; // TODO: remove for later phase
+        static constexpr std::size_t kCapacity = 4096;
+        static constexpr std::size_t kPayloadAlign = kCacheLine;
 
         std::uint32_t len;
-        std::byte payload[kCapacity];
+        alignas(kPayloadAlign) std::byte payload[kCapacity];
     };
 
     struct ControlBlock {
@@ -32,8 +33,8 @@ namespace zcshm {
         "seq must be lock-free");
     static_assert(std::is_standard_layout_v<ControlBlock>);
     static_assert(std::is_trivially_destructible_v<ControlBlock>);
-    static_assert(sizeof(ControlBlock) == 65792);
-    static_assert(sizeof(Slot) == 4100);
+    static_assert(sizeof(ControlBlock) == 66752);
+    static_assert(sizeof(Slot) == 4160);
     static_assert(offsetof(ControlBlock, slots) == 192);
-    static_assert(offsetof(Slot, payload) == 4);
+    static_assert(offsetof(Slot, payload) == 64);
 }

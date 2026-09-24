@@ -1,10 +1,10 @@
 #include <atomic>
-#include <csignal>
+#include <signal.h>
 #include <iostream>
 #include <ostream>
 #include <string>
 
-#include "zcshm/mailbox.hpp"
+#include "zcshm/spsc_queue.hpp"
 
 std::atomic<bool> running = true;
 
@@ -20,12 +20,12 @@ int main() {
     sa.sa_flags = 0; // no SA_RESTART
     sigaction(SIGINT, &sa, nullptr);
 
-    zcshm::Mailbox mailbox = zcshm::Mailbox::create("/zcshm");
+    zcshm::SpscQueue queue = zcshm::SpscQueue::create("/zcshm");
 
     // TODO: safe for now since spsc?
     while (running.load()) {
         std::cout << "message: " << std::flush;
-        std::span<std::byte> span = mailbox.reserve();
+        std::span<std::byte> span = queue.reserve();
 
         if (!std::cin.getline(reinterpret_cast<char*>(span.data()), span.size())) {
             if (!running.load())
@@ -36,7 +36,7 @@ int main() {
             break;
         }
 
-        mailbox.commit(std::cin.gcount() - 1);
+        queue.commit(std::cin.gcount() - 1);
     }
 
     return 0;

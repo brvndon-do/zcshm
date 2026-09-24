@@ -10,23 +10,23 @@
 #include "shm_region.hpp"
 
 namespace zcshm {
-    class Mailbox {
+    class SpscQueue {
     private:
         ShmRegion region_;
         ControlBlock* block_;
 
-        Mailbox(ShmRegion region);
+        SpscQueue(ShmRegion region);
     public:
-        static Mailbox create(const std::string& name);
-        static Mailbox attach(const std::string& name);
+        static SpscQueue create(const std::string& name);
+        static SpscQueue attach(const std::string& name);
 
         // move
-        Mailbox(Mailbox&& other) noexcept;
-        Mailbox& operator=(Mailbox&& other) noexcept;
+        SpscQueue(SpscQueue&& other) noexcept;
+        SpscQueue& operator=(SpscQueue&& other) noexcept;
 
         // copy (do not generate)
-        Mailbox(const Mailbox&)=delete;
-        Mailbox& operator=(const Mailbox&)=delete;
+        SpscQueue(const SpscQueue&)=delete;
+        SpscQueue& operator=(const SpscQueue&)=delete;
 
         // producer
         void publish(std::string_view msg);

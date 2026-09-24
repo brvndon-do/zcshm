@@ -9,26 +9,26 @@
 #include <stdexcept>
 #include <thread>
 
-#include "zcshm/mailbox.hpp"
+#include "zcshm/spsc_queue.hpp"
 #include "zcshm/layout.hpp"
 #include "zcshm/shm_region.hpp"
 
 namespace zcshm {
-    Mailbox::Mailbox(ShmRegion region) : region_(std::move(region)), block_(nullptr) {}
+    SpscQueue::SpscQueue(ShmRegion region) : region_(std::move(region)), block_(nullptr) {}
 
-    Mailbox Mailbox::create(const std::string &name) {
+    SpscQueue SpscQueue::create(const std::string &name) {
         ShmRegion region = ShmRegion::create(name, sizeof(ControlBlock));
-        Mailbox mailbox{std::move(region)};
+        SpscQueue queue{std::move(region)};
 
-        ControlBlock* block = new(mailbox.region_.data()) ControlBlock{};
+        ControlBlock* block = new(queue.region_.data()) ControlBlock{};
         block->ready.store(ControlBlock::kMagic, std::memory_order_release);
 
-        mailbox.block_ = block;
+        queue.block_ = block;
 
-        return mailbox;
+        return queue;
     }
 
-    Mailbox Mailbox::attach(const std::string &name) {
+    SpscQueue SpscQueue::attach(const std::string &name) {
         ShmRegion region = ShmRegion::attach(name);
 
         if (region.size() < sizeof(ControlBlock))
@@ -46,18 +46,18 @@ namespace zcshm {
         if (block->ready.load(std::memory_order_acquire) != ControlBlock::kMagic)
             throw std::runtime_error("region not ready");
 
-        Mailbox mailbox{std::move(region)};
-        mailbox.block_ = block;
+        SpscQueue queue{std::move(region)};
+        queue.block_ = block;
 
-        return mailbox;
+        return queue;
     }
 
-    Mailbox::Mailbox(Mailbox&& other) noexcept
+    SpscQueue::SpscQueue(SpscQueue&& other) noexcept
         : region_(std::move(other.region_)), block_(other.block_) {
             other.block_ = nullptr;
     }
 
-    Mailbox& Mailbox::operator=(Mailbox&& other) noexcept {
+    SpscQueue& SpscQueue::operator=(SpscQueue&& other) noexcept {
         if (this != &other) {
             region_ = std::move(other.region_);
             block_ = other.block_;
@@ -68,7 +68,7 @@ namespace zcshm {
         return *this;
     }
 
-    void Mailbox::publish(std::string_view msg) {
+    void SpscQueue::publish(std::string_view msg) {
         if (msg.length() > Slot::kCapacity)
             throw std::length_error("msg size is larger than kCapacity");
 
@@ -77,7 +77,7 @@ namespace zcshm {
         commit(msg.length());
     }
 
-    std::span<std::byte> Mailbox::reserve() {
+    std::span<std::byte> SpscQueue::reserve() {
         std::uint64_t seq = block_->seq.load(std::memory_order_relaxed); // TODO: this assumes spsc (single producer, single consumer) for now; multiple producers will break
         std::uint64_t index = seq % ControlBlock::kSlots;
 
@@ -91,7 +91,7 @@ namespace zcshm {
         return span;
     }
 
-    void Mailbox::commit(std::size_t len) {
+    void SpscQueue::commit(std::size_t len) {
         if (len > Slot::kCapacity)
             throw std::length_error("len size is larger than kCapacity");
 
@@ -102,7 +102,7 @@ namespace zcshm {
         block_->seq.store(seq + 1, std::memory_order_release);
     }
 
-    bool Mailbox::tryReceive(std::string& out) {
+    bool SpscQueue::tryReceive(std::string& out) {
         std::optional<std::span<const std::byte>> span = tryAcquire();
 
         if (!span)
@@ -114,7 +114,7 @@ namespace zcshm {
         return true;
     }
 
-    std::optional<std::span<const std::byte>> Mailbox::tryAcquire() {
+    std::optional<std::span<const std::byte>> SpscQueue::tryAcquire() {
         std::uint64_t ack = block_->ack.load(std::memory_order_relaxed); // TODO: this assumes spsc (single producer, single consumer) for now; consumers producers will break
         std::uint64_t index = ack % ControlBlock::kSlots;
 
@@ -127,7 +127,7 @@ namespace zcshm {
         return span;
     }
 
-    void Mailbox::consume() {
+    void SpscQueue::consume() {
         std::uint64_t ack = block_->ack.load(std::memory_order_relaxed);
         block_->ack.store(ack + 1, std::memory_order_release);
     }
