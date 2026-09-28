@@ -8,7 +8,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(zcshm_tests stress_test.cpp)
-target_link_libraries(zcshm_tests PRIVATE zcshm zcshm_warnings gtest_main)
+target_link_libraries(zcshm_tests PRIVATE zcshm zcshm_warnings GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(zcshm_tests)
+gtest_discover_tests(zcshm_tests
+    PROPERTIES
+        TIMEOUT 30
+        XML_OUTPUT_DIR ${CMAKE_BINARY_DIR}/test-results
+)

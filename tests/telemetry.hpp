@@ -14,5 +14,6 @@ struct Telemetry {
 };
 
 static_assert(sizeof(Telemetry) <= zcshm::Slot::kCapacity);
+static_assert(alignof(Telemetry) <= zcshm::Slot::kPayloadAlign);
 static_assert(std::is_standard_layout_v<Telemetry>);
 static_assert(std::is_trivially_copyable_v<Telemetry>);
