@@ -16,7 +16,7 @@
 namespace zcshm {
     SpscQueue::SpscQueue(ShmRegion region) : region_(std::move(region)), block_(nullptr) {}
 
-    SpscQueue SpscQueue::create(const std::string &name) {
+    SpscQueue SpscQueue::create(const std::string& name) {
         ShmRegion region = ShmRegion::create(name, sizeof(ControlBlock));
         SpscQueue queue{std::move(region)};
 
@@ -28,7 +28,7 @@ namespace zcshm {
         return queue;
     }
 
-    SpscQueue SpscQueue::attach(const std::string &name) {
+    SpscQueue SpscQueue::attach(const std::string& name) {
         ShmRegion region = ShmRegion::attach(name);
 
         if (region.size() < sizeof(ControlBlock))

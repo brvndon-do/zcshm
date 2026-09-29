@@ -1,7 +1,11 @@
 #include <atomic>
+#include <csignal>
+#include <cstdlib>
+#include <exception>
+#include <format>
 #include <signal.h>
 #include <iostream>
-#include <ostream>
+#include <span>
 #include <string>
 
 #include "zcshm/spsc_queue.hpp"
@@ -9,7 +13,7 @@
 std::atomic<bool> running = true;
 
 extern "C" void sigHandler(int sigNum) {
-    if (sigNum == SIGINT)
+    if (sigNum == SIGINT || sigNum == SIGTERM)
         running.store(false);
 }
 
@@ -19,24 +23,31 @@ int main() {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0; // no SA_RESTART
     sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
 
-    zcshm::SpscQueue queue = zcshm::SpscQueue::create("/zcshm");
+    try {
+        zcshm::SpscQueue queue = zcshm::SpscQueue::create("/zcshm");
 
-    // TODO: safe for now since spsc?
-    while (running.load()) {
-        std::cout << "message: " << std::flush;
-        std::span<std::byte> span = queue.reserve();
+        // TODO: safe for now since spsc?
+        while (running.load()) {
+            std::cout << "message: " << std::flush;
+            std::span<std::byte> span = queue.reserve();
 
-        if (!std::cin.getline(reinterpret_cast<char*>(span.data()), span.size())) {
-            if (!running.load())
+            if (!std::cin.getline(reinterpret_cast<char*>(span.data()), span.size())) {
+                if (!running.load())
+                    break;
+
+                // handles actual EOF (ctrl+d) or other stream errors
+                std::cout << "\nstream closed or error encountered.\n";
                 break;
+            }
 
-            // handles actual EOF (ctrl+d) or other stream errors
-            std::cout << "\nstream closed or error encountered.\n";
-            break;
+            queue.commit(std::cin.gcount() - 1);
         }
 
-        queue.commit(std::cin.gcount() - 1);
+    } catch (const std::exception& e) {
+        std::cerr << std::format("error: {}\n", e.what());
+        return EXIT_FAILURE;
     }
 
     return 0;

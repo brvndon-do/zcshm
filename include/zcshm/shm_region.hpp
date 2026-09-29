@@ -10,8 +10,9 @@ namespace zcshm {
         std::string name_;
         std::size_t size_;
         bool owned_;
+        int fd_;
 
-        ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned);
+        ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned, int fd);
 
         void reset() noexcept;
 

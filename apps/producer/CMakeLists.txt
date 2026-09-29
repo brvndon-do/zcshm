@@ -1,2 +1,2 @@
 add_executable(producer main.cpp)
-target_link_libraries(producer PRIVATE zcshm)
+target_link_libraries(producer PRIVATE zcshm zcshm_warnings)

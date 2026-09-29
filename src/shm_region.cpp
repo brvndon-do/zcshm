@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <fcntl.h>
 #include <format>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <system_error>
@@ -18,11 +19,11 @@ namespace zcshm {
         void failWith(int rc, int* fd, const std::string* name, const std::string& msg) {
             if (rc == -1) {
                 int err = errno;
-                if (fd)
-                    close(*fd);
-
                 if (name)
                     shm_unlink(name->c_str());
+
+                if (fd)
+                    close(*fd);
 
                 throw std::system_error(err, std::system_category(), msg);
             }
@@ -30,6 +31,33 @@ namespace zcshm {
 
         void failWith(int* fd, const std::string* name, const std::string& msg) {
             failWith(-1, fd, name, msg);
+        }
+
+        // returns true if segment was stale (or gone); caller should retry create
+        // returns false if a live producer holds the lock
+        bool reclaimIfStale(const std::string& name) {
+            int fd = shm_open(name.c_str(), O_RDWR, 0);
+            if (fd == -1) {
+                if (errno == ENOENT)
+                    return true; // some producer removed it after our EEXIST; just retry!
+
+                throw std::system_error(errno, std::system_category(), "shmopen (reclaim)");
+            }
+
+            if (flock(fd, LOCK_EX | LOCK_NB) == -1) {
+                int err = errno;
+                close(fd);
+
+                if (err == EWOULDBLOCK)
+                    return false;
+
+                throw std::system_error(err, std::system_category(), "flock (reclaim)");
+            }
+
+            shm_unlink(name.c_str()); // always unlink first, then release
+            close(fd);
+
+            return true;
         }
     }
 
@@ -40,28 +68,50 @@ namespace zcshm {
         if (owned_)
             shm_unlink(name_.c_str());
 
+        if (fd_ != -1)
+            close(fd_);
+
         data_ = nullptr;
         size_ = 0;
         owned_ = false;
+        fd_ = -1;
     }
 
-    ShmRegion::ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned)
-        : data_(data), name_(std::move(name)), size_(size), owned_(owned) {}
+    ShmRegion::ShmRegion(std::byte* data, std::string name, std::size_t size, bool owned, int fd)
+        : data_(data), name_(std::move(name)), size_(size), owned_(owned), fd_(fd) {}
 
     ShmRegion ShmRegion::create(const std::string& name, std::size_t size) {
-        int fd = shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
-        failWith(fd, nullptr, nullptr, "shmopen");
+        int fd = -1;
+        int retryCount = 0;
 
-        int rc = ftruncate(fd, size);
-        failWith(rc, &fd, &name, "ftruncate");
+        while (retryCount < 3) {
+            fd = shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
+            if (fd != -1)
+                break; // shm_open success
+
+            if (errno != EEXIST || retryCount + 1 == 3)
+                failWith(fd, nullptr, nullptr, "shmopen");
+
+            if (!reclaimIfStale(name))
+                throw std::system_error(
+                    EEXIST,
+                    std::system_category(),
+                    std::format("{} is owned by a live producer", name));
+
+            ++retryCount;
+        }
+
+        int flockRc = flock(fd, LOCK_EX | LOCK_NB);
+        failWith(flockRc, &fd, nullptr, "flock");
+
+        int ftruncateRc = ftruncate(fd, size);
+        failWith(ftruncateRc, &fd, &name, "ftruncate");
 
         auto* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (ptr == MAP_FAILED)
             failWith(&fd, &name, "mmap");
 
-        close(fd);
-
-        return ShmRegion{static_cast<std::byte*>(ptr), name, size, true};
+        return ShmRegion{static_cast<std::byte*>(ptr), name, size, true, fd};
     }
 
     ShmRegion ShmRegion::attach(const std::string& name) {
@@ -100,13 +150,14 @@ namespace zcshm {
 
         close(fd);
 
-        return ShmRegion{static_cast<std::byte*>(ptr), name, size, false};
+        return ShmRegion{static_cast<std::byte*>(ptr), name, size, false, -1};
     }
 
     ShmRegion::ShmRegion(ShmRegion&& other) noexcept
-        : data_(other.data_), name_(std::move(other.name_)), size_(other.size_), owned_(other.owned_) {
+        : data_(other.data_), name_(std::move(other.name_)), size_(other.size_), owned_(other.owned_), fd_(other.fd_) {
             other.data_ = nullptr;
             other.owned_ = false;
+            other.fd_ = -1;
         }
 
     ShmRegion& ShmRegion::operator=(ShmRegion&& other) noexcept {
@@ -117,9 +168,11 @@ namespace zcshm {
             name_ = std::move(other.name_);
             size_ = other.size_;
             owned_ = other.owned_;
+            fd_ = other.fd_;
 
             other.data_ = nullptr;
             other.owned_ = false;
+            other.fd_ = -1;
         }
 
         return *this;

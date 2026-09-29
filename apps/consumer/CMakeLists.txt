@@ -1,2 +1,2 @@
 add_executable(consumer main.cpp)
-target_link_libraries(consumer PRIVATE zcshm)
+target_link_libraries(consumer PRIVATE zcshm zcshm_warnings)
